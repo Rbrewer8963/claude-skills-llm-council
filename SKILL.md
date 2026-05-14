@@ -1,392 +1,272 @@
 ---
-
 name: llm-council
-
-
-description: "Run any question, idea, or decision through a council of 5 AI advisors who independently analyze it, peer-review each other anonymously, and synthesize a final verdict. Based on Karpathy's LLM Council methodology. MANDATORY TRIGGERS: 'council this', 'run the council', 'war room this', 'pressure-test this', 'stress-test this', 'debate this'. STRONG TRIGGERS (use when combined with a real decision or tradeoff): 'should I X or Y', 'which option', 'what would you do', 'is this the right move', 'validate this', 'get multiple perspectives', 'I can't decide', 'I'm torn between'. Do NOT trigger on simple yes/no questions, factual lookups, or casual 'should I' without a meaningful tradeoff (e.g. 'should I use markdown' is not a council question). DO trigger when the user presents a genuine decision with stakes, multiple options, and context that suggests they want it pressure-tested from multiple angles."
-
+description: "Run any question, idea, or decision through a council of 5 domain experts who are dynamically constituted for the specific field in question, grounded in this workspace's memory and rules, and forced to take opposing stances. Each session starts with a mandatory Domain Triage that names five real experts (with named priors, schools of thought, and the statutes/papers/playbooks they think in) — not generic thinking lenses. Adapted from Karpathy's LLM Council methodology. MANDATORY TRIGGERS: 'council this', 'run the council', 'war room this', 'pressure-test this', 'stress-test this', 'debate this'. STRONG TRIGGERS (use when combined with a real decision or tradeoff): 'should I X or Y', 'which option', 'what would you do', 'is this the right move', 'validate this', 'get multiple perspectives', 'I can't decide', 'I'm torn between'. Do NOT trigger on simple yes/no questions, factual lookups, or casual 'should I' without a meaningful tradeoff. The council REFUSES to run on questions that have no domain of expertise behind them (e.g. trivial naming, taste preferences); answer those directly instead."
 ---
 
+# LLM Council — Domain Experts, Not Generic Lenses
 
-# LLM Council
+The toy version of this skill spun up five generic thinking personas (Contrarian, Expansionist, etc.) and produced startup-podcast advice. It is deleted.
 
+This version constitutes a real council. Before any advisor speaks, the skill runs a **Domain Triage** that identifies the actual field(s) the question lives in, names five specific experts with stated priors and the literature they think in, and pulls the relevant slices of this workspace's memory and rules into their context. Each expert occupies a distinct stance — skeptic, builder, regulator, practitioner, theorist (or whichever five stances best stress the question) — so the council still produces adversarial tension. The Chairman is a senior practitioner in the dominant field, not a generic synthesizer.
 
-You ask one AI a question, you get one answer. That answer might be great. It might be mid. You have no way to tell because you only saw one perspective.
-
-
-The council fixes this. It runs your question through 5 independent advisors, each thinking from a fundamentally different angle. Then they review each other's work. Then a chairman synthesizes everything into a final recommendation that tells you where the advisors agree, where they clash, and what you should actually do.
-
-
-This is adapted from Andrej Karpathy's LLM Council. He dispatches queries to multiple models, has them peer-review each other anonymously, then a chairman produces the final answer. We do the same thing inside Claude using sub-agents with different thinking lenses instead of different models.
-
+If the question has no real domain — a taste preference, a trivial naming choice, a factual lookup — the council REFUSES to run and tells the user to ask it directly. No theatre.
 
 ---
-
 
 ## when to run the council
 
+The council is for questions where being wrong is expensive AND a body of expertise exists.
 
-The council is for questions where being wrong is expensive.
+Good council questions (each lives in a real body of expertise):
+- "Should I take a $40k strategic SAFE now or wait 3 months for a $250k institutional seed?" (VC term-sheet practice + signaling risk + runway math)
+- "Is this DSP claim patentable over the existing NCO/CORDIC prior art?" (USPTO §103 obviousness + DSP prior-art landscape)
+- "Should I file Form 843 protective claims before or after the §6511 statute of limitations runs?" (IRC §6511 + protective-claim case law)
+- "Per-event fee vs. trustee-assignment fee for collection on a surety-bond claim?" (49 CFR 387 + assignment-in-trust mechanics + collection ethics rules)
+- "Should we open-source our core engine or keep it closed-source with API access?" (OSS commercial strategy + competitive-moat theory + license design)
 
+Bad council questions (refuse, answer directly):
+- "What's the capital of France?" — factual lookup
+- "Should I name the new service `boondock` or `boondock-screener`?" — taste, no expertise body
+- "Write me a tweet" — creation task
+- "Summarize this PDF" — processing task
 
-Good council questions:
-
-- "Should I launch a $97 workshop or a $497 course?"
-
-- "Which of these 3 positioning angles is strongest?"
-
-- "I'm thinking of pivoting from X to Y. Am I crazy?"
-
-- "Here's my landing page copy. What's weak?"
-
-- "Should I hire a VA or build an automation first?"
-
-
-Bad council questions:
-
-- "What's the capital of France?" (one right answer, no need for perspectives)
-
-- "Write me a tweet" (creation task, not a decision)
-
-- "Summarize this article" (processing task, not judgment)
-
-
-The council shines when there's genuine uncertainty and the cost of a bad call is high. If you already know the answer and just want validation, the council will likely tell you things you don't want to hear. That's the point.
-
+The refusal is loud and short: *"This question doesn't have a real domain of expertise behind it. Running a council would be theatre. Here is the direct answer: …"*
 
 ---
 
+## the mandatory pre-flight: Domain Triage
 
-## the five advisors
+Before doing anything else, perform Domain Triage. Output a small JSON-shaped block (you don't have to literally emit JSON, but think in this shape) that names the field(s), the five experts, and the memory/rules to load.
 
+### what Domain Triage produces
 
-Each advisor thinks from a different angle. They're not job titles or personas. They're thinking styles that naturally create tension with each other.
+1. **Primary domain** — the field with the most weight in the question. (e.g. *"FMCSA freight-broker enforcement law"*, *"CUDA kernel performance on sm_90"*, *"GP-led continuation-fund secondaries under ASC 350-30"*)
 
+2. **Adjacent domains** — 1–3 fields the answer also touches. (e.g. *"two-sided marketplace pricing"*, *"protective-claim doctrine under IRC §6511"*)
 
-### 1. The Contrarian
+3. **Five experts** — each with:
+   - **Name + role** (e.g. *"Securities defense litigator with 10 yrs at a top-50 broker-dealer"*, *"Independent sponsor with 6 closed federal-contractor rollups under ASC 350-30 push-down accounting"*)
+   - **School of thought / lineage** (e.g. *"Almgren-Chriss execution-cost school"*, *"Lessig-style §230 reform"*, *"Goldratt theory-of-constraints operator"*)
+   - **The literature/statutes/playbooks they think in** — concrete: case names, statute sections, RFC numbers, papers, framework names, named operators
+   - **Stated priors** — what they walk in believing about questions like this
+   - **Their stance in this council** — exactly one of: *skeptic, builder, regulator, practitioner, theorist, outside-view* (or another stance you justify). No two experts share a stance.
+   - **What evidence would change their mind**
 
-Actively looks for what's wrong, what's missing, what will fail. Assumes the idea has a fatal flaw and tries to find it. If everything looks solid, digs deeper. The Contrarian is not a pessimist. They're the friend who saves you from a bad deal by asking the questions you're avoiding.
+4. **Memory slices to pre-load** — specific files from `MEMORY.md` topic links + `.claude/rules/*.md` that every expert reads before answering. Pick 2–5 files max; more is noise.
 
+### two non-negotiable composition rules
 
-### 2. The First Principles Thinker
+- **Adversarial coverage is mandatory.** The five stances must produce real tension. At minimum: one skeptic who actively tries to kill the idea using their domain's strongest counter-arguments, one builder who would ship it Monday, one regulator/compliance voice that names the statutes/standards that bite. The other two stances are chosen to fit the question.
+- **No two experts may share a school of thought.** If two experts are both "Black-Scholes quants," collapse them and pick a different lineage for the slot (e.g. swap one for a market-microstructure quant or a regime-switching econometrician).
 
-Ignores the surface-level question and asks "what are we actually trying to solve here?" Strips away assumptions. Rebuilds the problem from the ground up. Sometimes the most valuable council output is the First Principles Thinker saying "you're asking the wrong question entirely."
+### refusal gate
 
-
-### 3. The Expansionist
-
-Looks for upside everyone else is missing. What could be bigger? What adjacent opportunity is hiding? What's being undervalued? The Expansionist doesn't care about risk (that's the Contrarian's job). They care about what happens if this works even better than expected.
-
-
-### 4. The Outsider
-
-Has zero context about you, your field, or your history. Responds purely to what's in front of them. This is the most underrated advisor. Experts develop blind spots. The Outsider catches the curse of knowledge: things that are obvious to you but confusing to everyone else.
-
-
-### 5. The Executor
-
-Only cares about one thing: can this actually be done, and what's the fastest path to doing it? Ignores theory, strategy, and big-picture thinking. The Executor looks at every idea through the lens of "OK but what do you do Monday morning?" If an idea sounds brilliant but has no clear first step, the Executor will say so.
-
-
-**Why these five:** They create three natural tensions. Contrarian vs Expansionist (downside vs upside). First Principles vs Executor (rethink everything vs just do it). The Outsider sits in the middle keeping everyone honest by seeing what fresh eyes see.
-
+If you cannot name a primary domain with a real body of literature/statute/practice — refuse. Do not invent a domain. Do not fall back to "general business advice." Answer the question directly outside the council.
 
 ---
 
+## step 1: frame the question (with workspace context)
 
-## how a council session works
+After triage passes, frame the neutral prompt every expert receives.
 
+**A. Pull workspace context.** Read the memory slices identified in triage. Also scan for:
+- Any `CLAUDE.md` in the project root
+- Project-specific topic files in `~/.claude/projects/<project-slug>/memory/`
+- Any files the user referenced
+- Recent council transcripts in `~/Documents/council/` (to avoid re-counciling the same ground)
 
-### step 1: frame the question (with context enrichment)
+Cap context-gathering at 60 seconds.
 
+**B. Frame the question** as a clear, neutral prompt that includes:
+1. The core decision
+2. Key constraints from the user's message
+3. Relevant workspace facts (numbers, deadlines, existing decisions, prior council outputs)
+4. What's at stake
+5. The five experts the council will hear from (so they know who they're sitting beside, by role only — no anonymization needed at this stage)
 
-When the user says "council this" (or any trigger phrase), do two things before framing:
+Don't add your own opinion. Don't steer it. Save the framed question for the transcript.
 
+If the question is too vague *and* triage couldn't infer a domain, ask exactly one clarifying question. Otherwise proceed.
 
-**A. Scan the workspace for context.** The user's question is often just the tip of the iceberg. Their Claude setup likely contains files that would dramatically improve the council's output. Before framing, quickly scan for and read any relevant context files:
+---
 
+## step 2: convene the council (5 experts in parallel)
 
-- `CLAUDE.md` or `claude.md` in the project root or workspace (business context, preferences, constraints)
+Spawn all 5 experts simultaneously via the Agent tool with `subagent_type: general-purpose`. Parallel only — sequential spawning lets earlier reasoning bleed into later. Each gets:
 
-- Any `memory/` folder (audience profiles, voice docs, business details, past decisions)
-
-- Any files the user explicitly referenced or attached
-
-- Recent council transcripts in this folder (to avoid re-counciling the same ground)
-
-- Any other context files that seem relevant to the specific question (e.g., if they're asking about pricing, look for revenue data, past launch results, audience research)
-
-
-Use `Glob` and quick `Read` calls to find these. Don't spend more than 30 seconds on this. You're looking for the 2-3 files that would give advisors the context they need to give specific, grounded advice instead of generic takes.
-
-
-**B. Frame the question.** Take the user's raw question AND the enriched context and reframe it as a clear, neutral prompt that all five advisors will receive. The framed question should include:
-
-
-1. The core decision or question
-
-2. Key context from the user's message
-
-3. Key context from workspace files (business stage, audience, constraints, past results, relevant numbers)
-
-4. What's at stake (why this decision matters)
-
-
-Don't add your own opinion. Don't steer it. But DO make sure each advisor has enough context to give a specific, grounded answer rather than generic advice.
-
-
-If the question is too vague ("council this: my business"), ask one clarifying question. Just one. Then proceed.
-
-
-Save the framed question for the transcript.
-
-
-### step 2: convene the council (5 sub-agents in parallel)
-
-
-Spawn all 5 advisors simultaneously as sub-agents. Each gets:
-
-
-1. Their advisor identity and thinking style (from the descriptions above)
-
+1. Their full expert profile from triage (name/role, school of thought, the literature they think in, priors, stance, evidence-that-would-change-their-mind)
 2. The framed question
+3. The pre-loaded memory slices (paste relevant excerpts inline; don't make the sub-agent re-discover them)
+4. Instructions: respond from their stance, cite specific authorities (statutes, cases, papers, prior council outputs, project memory entries) when relevant, do not hedge, do not try to be balanced, and explicitly state at least one **falsifier** — the evidence or test that would prove their position wrong.
 
-3. A clear instruction: respond independently. Do not hedge. Do not try to be balanced. Lean fully into your assigned perspective. If you see a fatal flaw, say it. If you see massive upside, say it. Your job is to represent your angle as strongly as possible. The synthesis comes later.
-
-
-Each advisor should produce a response of 150-300 words. Long enough to be substantive, short enough to be scannable.
-
+Each response: 200–400 words. Long enough to carry real reasoning; short enough to scan.
 
 **Sub-agent prompt template:**
 
-
 ```
+You are sitting on an LLM Council as: {expert name + role}.
 
-You are [Advisor Name] on an LLM Council.
+School of thought: {lineage}
+Literature you think in: {specific statutes, cases, papers, frameworks, playbooks}
+Your stated priors on questions like this: {priors}
+Your stance in this council: {skeptic | builder | regulator | practitioner | theorist | outside-view}
+Evidence that would change your mind: {falsifiers}
 
+The other four seats are held by:
+- {role 1, stance 1}
+- {role 2, stance 2}
+- {role 3, stance 3}
+- {role 4, stance 4}
 
-Your thinking style: [advisor description from above]
+Relevant workspace context the council has loaded for you (do not re-derive; use):
+---
+{memory excerpts + rule excerpts}
+---
 
+The question:
+---
+{framed question}
+---
 
-A user has brought this question to the council:
+Respond from your expert role and stance. Cite specific authorities (statute sections, case names, papers, framework names, project memory entries) wherever they bear. Do not hedge. Do not try to be balanced — your job is to represent your stance at its strongest; the other seats cover what you don't.
 
+End your response with a single line: **Falsifier:** {the specific evidence or test that would prove you wrong}.
+
+200–400 words. No preamble.
+```
 
 ---
 
-[framed question]
+## step 3: peer review (5 sub-agents in parallel)
 
----
+This is the Karpathy step that makes the council more than "ask 5 times."
 
+Collect all 5 expert responses. Anonymize them as Response A–E (randomize the mapping so there's no positional bias and no clue to which stance produced which output).
 
-Respond from your perspective. Be direct and specific. Don't hedge or try to be balanced. Lean fully into your assigned angle. The other advisors will cover the angles you're not covering.
+Spawn 5 reviewers in parallel. Each reviewer is one of the original five experts (so they review with their domain lens). Each sees all 5 anonymized responses and answers four questions:
 
-
-Keep your response between 150-300 words. No preamble. Go straight into your analysis.
-
-```
-
-
-### step 3: peer review (5 sub-agents in parallel)
-
-
-This is the step that makes the council more than just "ask 5 times." It's the core of Karpathy's insight.
-
-
-Collect all 5 advisor responses. Anonymize them as Response A through E (randomize which advisor maps to which letter so there's no positional bias).
-
-
-Spawn 5 new sub-agents, one for each advisor. Each reviewer sees all 5 anonymized responses and answers three questions:
-
-
-1. Which response is the strongest and why? (pick one)
-
-2. Which response has the biggest blind spot and what is it?
-
-3. What did ALL responses miss that the council should consider?
-
+1. Which response is the strongest? Why? (one pick, with reasoning grounded in the domain)
+2. Which response has the biggest blind spot? What specifically is it missing? (cite authority if relevant)
+3. Which response, if any, contains a factual or doctrinal error? Quote it and correct it.
+4. What did ALL five responses miss that the council should consider?
 
 **Reviewer prompt template:**
 
-
 ```
+You are reviewing the outputs of an LLM Council. You are: {expert name + role}.
 
-You are reviewing the outputs of an LLM Council. Five advisors independently answered this question:
+School of thought: {lineage}
+Literature you think in: {specific items}
 
-
+Five experts independently answered this question:
+---
+{framed question}
 ---
 
-[framed question]
+Their anonymized responses:
 
----
+**Response A:** {response}
+**Response B:** {response}
+**Response C:** {response}
+**Response D:** {response}
+**Response E:** {response}
 
+Answer four questions. Be specific. Reference responses by letter. Cite authority when correcting.
 
-Here are their anonymized responses:
-
-
-**Response A:**
-
-[response]
-
-
-**Response B:**
-
-[response]
-
-
-**Response C:**
-
-[response]
-
-
-**Response D:**
-
-[response]
-
-
-**Response E:**
-
-[response]
-
-
-Answer these three questions. Be specific. Reference responses by letter.
-
-
-1. Which response is the strongest? Why?
-
+1. Which response is strongest? Why?
 2. Which response has the biggest blind spot? What is it missing?
+3. Which response, if any, contains a factual or doctrinal error? Quote and correct.
+4. What did ALL five miss?
 
-3. What did ALL five responses miss that the council should consider?
-
-
-Keep your review under 200 words. Be direct.
-
+Under 250 words. Be direct.
 ```
 
+---
 
-### step 4: chairman synthesis
+## step 4: chairman synthesis
 
+The Chairman is a senior practitioner in the *primary domain* identified by triage — not a generic synthesizer. (e.g. for a CUDA performance question, the Chairman is a principal performance engineer; for a § 387.307 question, a transportation enforcement attorney with two decades of carrier-recovery work.)
 
-This is the final step. One agent gets everything: the original question, all 5 advisor responses (now de-anonymized so you can see which advisor said what), and all 5 peer reviews.
-
-
-The chairman's job is to produce the final council output. It follows this structure:
-
-
-**COUNCIL VERDICT**
-
-
-1. **Where the council agrees** — the points that multiple advisors converged on independently. These are high-confidence signals.
-
-
-2. **Where the council clashes** — the genuine disagreements. Don't smooth these over. Present both sides and explain why reasonable advisors disagree.
-
-
-3. **Blind spots the council caught** — things that only emerged through the peer review round. Things individual advisors missed that other advisors flagged.
-
-
-4. **The recommendation** — a clear, actionable recommendation. Not "it depends." Not "consider both sides." A real answer. The chairman can disagree with the majority if the reasoning supports it.
-
-
-5. **The one thing you should do first** — a single concrete next step. Not a list of 10 things. One thing.
-
+The Chairman gets: the framed question, all 5 de-anonymized expert responses, all 5 peer reviews, and the loaded memory excerpts.
 
 **Chairman prompt template:**
 
-
 ```
+You are the Chairman of an LLM Council. You are: {senior practitioner in primary domain — name role + lineage}.
 
-You are the Chairman of an LLM Council. Your job is to synthesize the work of 5 advisors and their peer reviews into a final verdict.
+Your job is to synthesize the work of 5 experts and their peer reviews into a final verdict that a domain practitioner would respect. Hedge-free. Cite authority where it bears.
 
+The primary domain: {primary domain from triage}
+Adjacent domains: {adjacent domains}
 
-The question brought to the council:
-
+The question:
+---
+{framed question}
 ---
 
-[framed question]
-
----
-
-
-ADVISOR RESPONSES:
-
-
-**The Contrarian:**
-
-[response]
-
-
-**The First Principles Thinker:**
-
-[response]
-
-
-**The Expansionist:**
-
-[response]
-
-
-**The Outsider:**
-
-[response]
-
-
-**The Executor:**
-
-[response]
-
+EXPERT RESPONSES (de-anonymized):
+**{Expert 1 role, stance 1}:** {response}
+**{Expert 2 role, stance 2}:** {response}
+**{Expert 3 role, stance 3}:** {response}
+**{Expert 4 role, stance 4}:** {response}
+**{Expert 5 role, stance 5}:** {response}
 
 PEER REVIEWS:
+{all 5 reviews, attributed to reviewer role}
 
-[all 5 peer reviews]
+Workspace context the council had:
+---
+{memory + rule excerpts}
+---
 
+Produce the verdict using this exact structure:
 
-Produce the council verdict using this exact structure:
-
+## Domain & Council Composition
+{One paragraph: name the primary domain and the five experts who sat. This is the council's authority claim — the user should read it and either trust the panel or push back on the composition.}
 
 ## Where the Council Agrees
-
-[Points multiple advisors converged on independently. These are high-confidence signals.]
-
+{Points multiple experts converged on independently, with the doctrinal or empirical basis. High-confidence signals.}
 
 ## Where the Council Clashes
+{Genuine disagreements. Present both sides with the strongest case for each. Explain why reasonable experts in the field disagree — is this a settled question being misapplied, or a genuinely contested area?}
 
-[Genuine disagreements. Present both sides. Explain why reasonable advisors disagree.]
-
+## Doctrinal/Factual Corrections
+{Any errors caught in peer review, with the correction. Even one matters.}
 
 ## Blind Spots the Council Caught
-
-[Things that only emerged through peer review. Things individual advisors missed that others flagged.]
-
+{Things only the peer-review round surfaced.}
 
 ## The Recommendation
-
-[A clear, direct recommendation. Not "it depends." A real answer with reasoning.]
-
+{A clear, direct recommendation. Not "it depends." A real answer with the reasoning that survived adversarial review. The Chairman may overrule the majority if the minority reasoning is doctrinally stronger; if so, say so explicitly.}
 
 ## The One Thing to Do First
+{A single concrete next step. Not a list. One thing — something the user can execute Monday morning.}
 
-[A single concrete next step. Not a list. One thing.]
+## Falsifier
+{The single piece of evidence or test that, if observed, should cause the user to reverse the recommendation. This is the council's intellectual honesty check.}
 
-
-Be direct. Don't hedge. The whole point of the council is to give the user clarity they couldn't get from a single perspective.
-
+Be direct. No hedging. The council's value is clarity a single perspective can't produce.
 ```
 
+---
 
-### step 5: present the verdict in chat
+## step 5: present the verdict in chat
 
+After Chairman synthesis, present the full verdict in chat as markdown. No HTML, no separate file unless requested.
 
-After the chairman synthesis is complete, present the full verdict directly in chat using markdown. Do NOT generate an HTML report or any files. The user reads it in the conversation.
-
-Format the output as:
-
+Format:
 ```
 ## Council Verdict: {short topic}
+
+**Panel:** {one-line composition — primary domain + 5 expert roles}
 
 ### Where the Council Agrees
 {content}
 
 ### Where the Council Clashes
+{content}
+
+### Doctrinal/Factual Corrections
 {content}
 
 ### Blind Spots the Council Caught
@@ -397,71 +277,104 @@ Format the output as:
 
 ### The One Thing to Do First
 {content}
+
+### Falsifier
+{content}
 ```
 
-Keep it scannable. Use bullet points. Include the before/after examples where relevant.
-
-
-### step 6: save the transcript (optional)
-
-
-Only save a transcript if the user asks for it or if the question is significant enough to reference later. If saving, write to `council-transcript-[timestamp].md` in the project's `active/` directory.
-
+Keep it scannable. Bullet points where they help. Inline citations of statutes/cases/papers in parentheses.
 
 ---
 
+## step 6: save the transcript
 
-## example: counciling a product decision
+Always save the transcript when the council runs (the no-theatre gate already filtered out trivial questions, so every real run is worth keeping).
 
+Write to `~/Documents/council/council-{YYYY-MM-DD-HHMM}-{short-topic-slug}.md`. Create the directory if it doesn't exist. Transcript includes: triage output, framed question, all 5 expert responses, all 5 peer reviews, Chairman verdict.
 
-**User:** "Council this: I'm thinking of building a $297 course on Claude Code for beginners. My audience is mostly non-technical solopreneurs. Is this the right move?"
-
-
-**The Contrarian:** "The market is flooded with Claude courses right now. At $297, you're competing with free YouTube content. Your audience is non-technical, which means high support burden and refund risk. The people who would pay $297 are likely already past beginner level..."
-
-
-**The First Principles Thinker:** "What are you actually trying to achieve? If it's revenue, a course is one of the slowest paths. If it's authority, a free resource might do more. If it's building a customer base for higher-ticket offers, the price point and audience might be mismatched..."
-
-
-**The Expansionist:** "Beginner Claude for solopreneurs is a massive underserved market. Everyone's teaching advanced stuff. If you nail the beginner angle, you own the entry point to this entire space. The $297 might be low. What if this became a $997 program with community access..."
-
-
-**The Outsider:** "I don't know what Claude Code is. If I saw '$297 course on Claude Code for beginners,' I wouldn't know if this is for me. The name means nothing to someone outside your world. Your landing page needs to sell the outcome, not the tool..."
-
-
-**The Executor:** "A full course takes 4-8 weeks to produce properly. Before building anything, run a live workshop at $97 to 50 people. You validate demand, generate testimonials, and create the raw material for the course. If 50 people don't buy the workshop, 500 won't buy the course..."
-
-
-**Chairman's Verdict:**
-
-
-*Where the council agrees:* The beginner solopreneur angle has real demand, but the current framing (Claude Code course) is too tool-specific and won't resonate with non-technical buyers.
-
-
-*Where the council clashes:* Price. The Contrarian says $297 is too high given competition. The Expansionist says it's too low for the value. The resolution likely depends on how much support and community access is bundled.
-
-
-*Blind spots caught:* The Outsider's point that "Claude Code" means nothing to the target buyer is the single most important insight. Every advisor except the Outsider assumed the audience already knows what this is.
-
-
-*Recommendation:* Don't build the course yet. Validate with a lower-commitment offer first. But reframe entirely: sell the outcome (automate your business, get 10 hours back per week), not the tool.
-
-
-*One thing to do first:* Run a $97 live workshop called "How to automate your first business task with AI" to 50 people. Don't mention Claude Code in the title.
-
+This corpus is the council's institutional memory. Before running a new council on a similar topic, the framing step should grep `~/Documents/council/` to surface prior verdicts that bear on the new question.
 
 ---
 
+## worked example: triage in action
+
+**User:** "Council this: A strategic investor (a VP at a company that could plausibly compete with us in 18 months) just offered $40k on a $4M cap SAFE. Or I can wait ~3 months and likely close a $250k institutional seed from a generalist VC at a similar cap. Take the check or hold out?"
+
+**Domain Triage output (think in this shape; you don't have to literally print it):**
+
+```
+Primary domain: Early-stage venture term-sheet practice + strategic-vs-financial investor dynamics
+Adjacent: Dilution & cap-table mechanics,
+          competitive-intelligence / signaling risk,
+          founder runway / opportunity cost under uncertainty
+
+Five experts:
+  1. NVCA-school startup attorney with 15 yrs seed term-sheet practice.
+     Lit: NVCA model documents (2024 rev), YC SAFE post-money template,
+       "Venture Deals" (Feld & Mendelson), pro-rata + MFN clause practice,
+       information-rights customary scope at $4M cap.
+     Priors: strategic SAFEs almost always demand info rights that
+       no other investor would tolerate; the doc terms matter more
+       than the headline cap.
+     Stance: REGULATOR.
+     Falsifier: clean SAFE with no info rights, no ROFR, no board observer.
+
+  2. Late-stage VC partner who has seen 200+ strategic-investor cap tables.
+     Lit: Bill Gurley on signaling risk, A16Z notes on strategic capital,
+       SVB "Startup Outlook" reports, observed pattern of strategics
+       dropping pro-rata in down rounds.
+     Priors: a strategic on the cap table can poison the well for
+       future institutional rounds, especially at seed; financial
+       investors hate "strategic overhang".
+     Stance: SKEPTIC.
+     Falsifier: institutional VCs in the next round explicitly
+       saying the strategic doesn't bother them.
+
+  3. Exit-stage founder who took strategic money early and regretted it.
+     Lit: own postmortem; First Round Review founder-interview corpus;
+       Reid Hoffman on competing-incumbent capital.
+     Priors: the optionality you lose to a strategic check shows up
+       3-4 years later when you try to sell to anyone but them.
+     Stance: PRACTITIONER (outside view from the founder seat).
+     Falsifier: example of a founder who took strategic seed money
+       and sold to a non-strategic acquirer at premium valuation.
+
+  4. Information-economics theorist (Spence/Akerlof lineage).
+     Lit: "Job Market Signaling" (1973), "Lemons" (1970),
+       venture-stage signaling literature, optimal-stopping problem
+       framing for sequential funding offers.
+     Priors: under uncertainty, the bird-in-hand bias is real but
+       often overweighted relative to expected-value math when
+       the option value of waiting is high.
+     Stance: THEORIST.
+     Falsifier: explicit probability of the $250k round not closing
+       exceeds the dilution + signaling cost of the $40k.
+
+  5. Operator-CFO who has run runway math for 30+ pre-seed startups.
+     Lit: own spreadsheets; "Runway = Cash / Burn" first-principles
+       calc; David Sacks on default-alive vs default-dead.
+     Priors: nothing matters except whether the $40k buys enough
+       runway to materially change the next milestone before the
+       institutional round; if it doesn't, it's noise on the cap table.
+     Stance: BUILDER (operator who wants the company to survive).
+     Falsifier: the $40k extends runway by < 6 weeks OR the next
+       milestone isn't valuation-moving.
+
+Memory to pre-load:
+  (none for this example — no workspace context relevant; in a
+   real session, triage would identify any CLAUDE.md / memory
+   files that bear and pre-load 2–5 of them inline)
+```
+
+(Then the council runs through steps 1–6 with these five experts.)
+
+---
 
 ## important notes
 
-
-- **Always spawn all 5 advisors in parallel.** Sequential spawning wastes time and lets earlier responses bleed into later ones.
-
-- **Always anonymize for peer review.** If reviewers know which advisor said what, they'll defer to certain thinking styles instead of evaluating on merit.
-
-- **The chairman can disagree with the majority.** If 4 out of 5 advisors say "do it" but the reasoning of the 1 dissenter is strongest, the chairman should side with the dissenter and explain why.
-
-- **Don't council trivial questions.** If the user asks something with one right answer, just answer it. The council is for genuine uncertainty where multiple perspectives add value.
-
-- **The visual report matters.** Most users will scan the report, not read the full transcript. Make the HTML output clean and scannable.
+- **Triage is mandatory.** No "skip triage, just run the five lenses." That was the toy version.
+- **Always spawn all 5 experts in parallel.** Sequential spawning wastes time and contaminates reasoning.
+- **Always anonymize for peer review.** If reviewers know who said what, they defer to roles instead of evaluating on merit.
+- **The Chairman may overrule the majority.** If 4-of-5 agree but the minority reasoning is doctrinally stronger, the Chairman sides with the minority and explains why.
+- **The falsifier line is non-negotiable.** Every expert ends with one. The Chairman ends with one. A council without falsifiers is just confidently wrong.
+- **No theatre.** If the question doesn't have a domain, refuse and answer directly.
