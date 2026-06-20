@@ -2,3 +2,25 @@ __pycache__/
 *.pyc
 results/
 tmp/
+
+# ── Secrets: NEVER commit. The hub holds key names + pointers, never values. ──
+.env
+*.env
+!*.env.example
+!*.env.template
+.secrets/
+*secret*
+*credentials*
+.credentials.json
+*.pem
+*.key
+id_rsa*
+*token*
+!*token*.example
+reference_cloudflare.md
+
+# Backups / archives (contain .credentials.json + secrets)
+*.tar.gz
+*.tgz
+*.gpg
+*.age
