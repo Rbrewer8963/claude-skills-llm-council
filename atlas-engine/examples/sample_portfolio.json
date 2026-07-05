@@ -1,0 +1,16 @@
+{
+  "name": "Global Multi-Asset Fund",
+  "nav": 250000000,
+  "weights": {
+    "SPX": 0.28,
+    "NDX": 0.12,
+    "EFA": 0.10,
+    "EEM": 0.06,
+    "UST10": 0.18,
+    "IG": 0.12,
+    "HY": 0.08,
+    "GOLD": 0.06,
+    "WTI": 0.04,
+    "USD": -0.04
+  }
+}

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-risk-engine"
+version = "0.1.0"
+description = "ATLAS — an open, offline-capable institutional portfolio risk engine (a transparent Aladdin-class core)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ATLAS contributors" }]
+keywords = ["risk", "var", "monte-carlo", "portfolio", "quant", "stress-testing", "finance"]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+optimize = ["scipy>=1.10"]
+dev = ["pytest>=7", "scipy>=1.10"]
+
+[project.scripts]
+atlas = "atlas.cli:main"
+
+[tool.setuptools]
+packages = ["atlas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
