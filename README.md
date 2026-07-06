@@ -90,6 +90,24 @@ Claude will spin up the 5 advisors, run the peer review, and deliver the chairma
 
 ---
 
+## Also in this repo: ATLAS
+
+This repository also hosts [**ATLAS**](atlas/) — *Asset, Treasury, Liability &
+Analytics System* — a from-scratch, dependency-free portfolio **risk engine** in
+the spirit of BlackRock's Aladdin. It does VaR/CVaR, correlated Monte-Carlo
+simulation, stress testing, mean-variance / risk-parity construction, factor
+exposure and compliance checks, all in pure Python with a full test suite.
+
+Try it:
+
+```bash
+cd atlas && python3 -m atlas demo
+```
+
+See [`atlas/README.md`](atlas/README.md) for the full tour.
+
+---
+
 ## Credit
 
 This skill was built by [Ole Lehmann](https://x.com/itsolelehmann). Go follow him, the man cooks.
