@@ -47,6 +47,31 @@ python3 -m atlas frontier                    # efficient frontier + min-variance
 python3 -m atlas analyze examples/sample_portfolio.json
 ```
 
+## Run it as a service
+
+ATLAS is also an installable package with a zero-dependency JSON API:
+
+```bash
+pip install .            # console entry point: `atlas`
+atlas serve              # JSON API on 0.0.0.0:8080
+curl -s localhost:8080/health
+curl -s -X POST localhost:8080/risk -H 'Content-Type: application/json' \
+     -d @examples/sample_portfolio.json
+```
+
+Or with Docker:
+
+```bash
+docker build -t atlas-risk . && docker run --rm -p 8080:8080 atlas-risk
+```
+
+Endpoints: `GET /health`, `GET /version`, `POST /analyze`, `POST /risk`,
+`POST /stress`, `POST /optimize`. Structured JSON logging, an audit trail of
+every request, input validation with clean `400`s, and configurable guardrails
+come built in. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full
+deployment guide — **including an honest checklist of what running real capital
+requires beyond this codebase**.
+
 As a library:
 
 ```python
@@ -103,8 +128,9 @@ print(r.risk.var_95_1d, r.risk.risk_contributions)
 python3 -m unittest discover -s tests -v
 ```
 
-37 tests cover the linear algebra, statistics, distributions, risk metrics,
-optimisers, and the end-to-end engine. Key invariants asserted:
+51 tests cover the linear algebra, statistics, distributions, risk metrics,
+optimisers, data ingestion, the API service layer, and the end-to-end engine
+(plus a live-server smoke test). Key invariants asserted:
 
 - component VaR sums to total parametric VaR (Euler allocation)
 - risk contributions sum to 1.0; risk-parity equalises them

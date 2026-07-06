@@ -105,7 +105,26 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--points", type=int, default=15)
     f.set_defaults(func=_cmd_frontier)
 
+    s = sub.add_parser("serve", help="run the JSON API server")
+    s.add_argument("--host", default=None, help="bind host (default from ATLAS_HOST or 0.0.0.0)")
+    s.add_argument("--port", type=int, default=None, help="bind port (default from ATLAS_PORT or 8080)")
+    s.set_defaults(func=_cmd_serve)
+
     return p
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from .config import Config
+    from .server import serve
+    config = Config.from_env()
+    if args.host is not None:
+        config = replace(config, host=args.host)
+    if args.port is not None:
+        config = replace(config, port=args.port)
+    serve(config)
+    return 0
 
 
 def main(argv: List[str] | None = None) -> int:
