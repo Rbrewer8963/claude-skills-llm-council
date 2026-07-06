@@ -1,0 +1,45 @@
+name: ATLAS CI
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "atlas/**"
+      - ".github/workflows/atlas-ci.yml"
+  pull_request:
+    paths:
+      - "atlas/**"
+      - ".github/workflows/atlas-ci.yml"
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: atlas
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke-test the CLI
+        run: |
+          python -m atlas demo --paths 500 >/dev/null
+          python -m atlas frontier --points 5 >/dev/null
+
+      - name: Smoke-test the API
+        run: python tests/smoke_api.py
